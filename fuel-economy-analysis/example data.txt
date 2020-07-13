@@ -1,0 +1,2 @@
+﻿example data
+http://localhost:7071/api/Function1?name=fred&date=2020-07-13&odo=21169&carMPG&fuel=23.03
