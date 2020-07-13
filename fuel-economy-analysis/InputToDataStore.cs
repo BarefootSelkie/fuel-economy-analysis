@@ -11,9 +11,9 @@ using Microsoft.VisualBasic;
 
 namespace fuel_economy_analysis
 {
-    public static class Function1
+    public static class InputToDataStore
     {
-        [FunctionName("Function1")]
+        [FunctionName("InputToDataStore")]
         public static async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
             ILogger log)
@@ -22,7 +22,7 @@ namespace fuel_economy_analysis
 
             string error = "Error: 400";
             bool failed = false;
-            string name = req.Query["name"];
+            string key = req.Query["key"];
             string dateIn = req.Query["date"];
             string odoIn = req.Query["odo"];
             string carMPGIn = req.Query["carMPG"];
@@ -32,7 +32,7 @@ namespace fuel_economy_analysis
             // Get data from the request
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             dynamic data = JsonConvert.DeserializeObject(requestBody);
-            name = name ?? data?.name;
+            key = key ?? data?.key;
             dateIn = dateIn ?? data?.dateIn;
             odoIn = odoIn ?? data?.odoIn;
             carMPGIn = carMPGIn ?? data?.carMPGIn;
@@ -65,18 +65,36 @@ namespace fuel_economy_analysis
                 error += System.Environment.NewLine + "Fuel should be a number between 0 and 100";
             }
 
+            
+            
             string responseMessage;
 
-            if (failed)
+            if (!failed)
             {
-                responseMessage = error;
+                // If no errors in data recieved echo back
+                responseMessage = "Got data:" + System.Environment.NewLine +
+                    $"Date: {dateIn}" + System.Environment.NewLine +
+                    $"ODO: {odo}" + System.Environment.NewLine +
+                    $"CarMPG: {carMPG}" + System.Environment.NewLine +
+                    $"Fuel: {fuel}";
+
             }
             else
             {
-                responseMessage = $"Got data, returning {name}, Date: {dateIn}, ODO: {odo}, CarMPG: {carMPG}, Fuel: {fuel}";
+                // If there was an error report error
+                responseMessage = error;
             }
 
             return new OkObjectResult(responseMessage);
+
         }
+
     }
+
+    /*public static void MPGtoKPL(decimal mpg)
+    {
+        decimal conversionFactor = 0.354;
+        decimal kpl = decimal.Multiply(mpg, conversionFactor);
+        return kpl;
+    }*/
 }
