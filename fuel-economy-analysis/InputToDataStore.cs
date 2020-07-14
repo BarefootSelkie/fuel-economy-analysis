@@ -12,6 +12,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.AzureAppConfiguration;
 using Newtonsoft.Json;
 using Microsoft.VisualBasic;
+using CsvHelper;
+using System.Globalization;
+using System.Linq;
 
 namespace fuel_economy_analysis
 {
@@ -84,18 +87,38 @@ namespace fuel_economy_analysis
 
             if (!failed)
             {
-                StreamReader reader = new StreamReader(myBlob);
-                string datafile = reader.ReadToEnd();
+                using (StreamReader reader = new StreamReader(myBlob))
+                using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+                {
+                    // Load the csv file into a variable
 
-                // If no errors in data recieved echo back
-                responseMessage = "Got data:" + System.Environment.NewLine +
-                    $"Date: {dateIn}" + System.Environment.NewLine +
-                    $"ODO: {odo}" + System.Environment.NewLine +
-                    $"Car MPG: {carMPG}" + System.Environment.NewLine +
-                    "Car KPL: " + MPGtoKPL(carMPG) + System.Environment.NewLine +
-                    "Car l/100km: " + MPGtoL100(carMPG) + System.Environment.NewLine +
-                    $"Fuel: {fuel}" + System.Environment.NewLine +
-                    datafile;
+                    var records = csv.GetRecords<datafile>();
+
+                    // Do the calcuations
+
+                    decimal workMiles = odo - records.Last().carODO;
+                    decimal workKM = MilestoKM(workMiles);
+                    decimal workCarKPL = MPGtoKPL(carMPG);
+                    decimal workCarL100 = MPGtoL100(carMPG);
+                    decimal workCalcKPL = workKM / fuel;
+                    decimal workCalcL100 = (fuel / workKM) * 100M;
+
+                    // Return recieved data and calcuated data for debugging
+
+                    responseMessage = "Got data:" + System.Environment.NewLine +
+                        $"Date: {dateIn}" + System.Environment.NewLine +
+                        $"ODO: {odo}" + System.Environment.NewLine +
+                        $"Car MPG: {carMPG}" + System.Environment.NewLine +
+                        $"Fuel: {fuel}" + System.Environment.NewLine +
+                        "Calcuated data:" + System.Environment.NewLine +
+                        $"Car Miles Traveled: {workMiles}" + System.Environment.NewLine +
+                        $"Car KM Traveled: {workKM}" + System.Environment.NewLine +
+                        $"Car KPL: {workCarKPL}" + System.Environment.NewLine +
+                        $"Car l/100km: {workCarL100}" + System.Environment.NewLine +
+                        $"Actual KPL: {workCalcKPL}" + System.Environment.NewLine +
+                        $"Actual l/100km: {workCalcL100}";
+
+                }
 
             }
             else
@@ -108,25 +131,39 @@ namespace fuel_economy_analysis
 
         }
 
-        public static decimal MPGtoKPL(decimal mpg)
+        public static decimal MPGtoKPL(decimal mpg) // Converts Miles per Gallon (Imp) to Km per Litre
         {
             decimal conversionFactor = 2.82481061M;
             decimal kpl = decimal.Divide(mpg, conversionFactor);
             return kpl;
         }
 
-        public static decimal MPGtoL100(decimal mpg)
+        public static decimal MPGtoL100(decimal mpg) // Converts Miles per Gallon (Imp) to Litres per 100km
         {
             decimal conversionFactor = 282.481061M;
             decimal l100 = decimal.Divide(conversionFactor, mpg);
             return l100;
         }
 
-        public static decimal MilestoKM(decimal miles)
+        public static decimal MilestoKM(decimal miles) // Converts Miles to Kilometers
         {
             decimal conversionFactor = 1.609344M;
             decimal kilometers = decimal.Multiply(miles, conversionFactor);
             return kilometers;
+        }
+
+        public class datafile //The design of the csv file
+        {
+            public DateAndTime date { get; set; }
+            public decimal carODO { get; set; }
+            public decimal calcMiles { get; set; }
+            public decimal calcKm { get; set; }
+            public decimal carFuel { get; set; }
+            public decimal carMPG { get; set; }
+            public decimal carKPL { get; set; }
+            public decimal carL100 { get; set; }
+            public decimal calcKPL { get; set; }
+            public decimal calcL100 { get; set; }
         }
 
     }
