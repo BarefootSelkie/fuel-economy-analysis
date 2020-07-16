@@ -10,11 +10,12 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.AzureAppConfiguration;
-using Newtonsoft.Json;
+//using Newtonsoft.Json;
 using Microsoft.VisualBasic;
 using CsvHelper;
 using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 
 namespace fuel_economy_analysis
 {
@@ -28,25 +29,32 @@ namespace fuel_economy_analysis
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
-
             string error = "Error: 400";
             bool failed = false;
-            string key = req.Query["key"];
             string secKey = "Change";
+
+            // Get data from the query 
+
+            string key = req.Query["key"];
             string dateIn = req.Query["date"];
             string odoIn = req.Query["odo"];
             string carMPGIn = req.Query["carMPG"];
             string fuelIn = req.Query["fuel"];
 
+            // Get data from the body
 
-            // Get data from the request
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            dynamic data = JsonConvert.DeserializeObject(requestBody);
-            key = key ?? data?.key;
-            dateIn = dateIn ?? data?.dateIn;
-            odoIn = odoIn ?? data?.odoIn;
-            carMPGIn = carMPGIn ?? data?.carMPGIn;
-            fuelIn = fuelIn ?? data?.fuelIn;
+
+            if (!string.IsNullOrEmpty(requestBody))
+            {
+                var data = JsonSerializer.Deserialize<requestDesign>(requestBody);
+
+                key = key ?? data?.key;
+                dateIn = dateIn ?? data?.date;
+                odoIn = odoIn ?? data?.odo;
+                carMPGIn = carMPGIn ?? data?.carMPG;
+                fuelIn = fuelIn ?? data?.fuel;
+            }
 
             // Convert data from strings and checks data is okay
 
@@ -80,8 +88,6 @@ namespace fuel_economy_analysis
                 failed = true;
                 error += System.Environment.NewLine + "Fuel should be a number between 0 and 100";
             }
-
-            
             
             string responseMessage;
 
@@ -92,32 +98,43 @@ namespace fuel_economy_analysis
                 {
                     // Load the csv file into a variable
 
-                    var records = csv.GetRecords<datafile>();
+                    var dataStore = csv.GetRecords<recordDesign>().ToList();
+
+                    // Create a working memory record
+
+                    recordDesign record = new recordDesign();
 
                     // Do the calcuations
 
-                    decimal workMiles = odo - records.Last().carODO;
-                    decimal workKM = MilestoKM(workMiles);
-                    decimal workCarKPL = MPGtoKPL(carMPG);
-                    decimal workCarL100 = MPGtoL100(carMPG);
-                    decimal workCalcKPL = workKM / fuel;
-                    decimal workCalcL100 = (fuel / workKM) * 100M;
+                    record.date = date;
+                    record.carODO = odo;
+                    record.calcDays = Convert.ToInt32((date - dataStore.Last().date).TotalDays);
+                    record.calcMiles = odo - dataStore.Last().carODO;
+                    record.calcKm = MilestoKM(record.calcMiles);
+                    record.calcKmD = record.calcKm / record.calcDays;
+                    record.carKPL = MPGtoKPL(carMPG);
+                    record.calcKPL = record.calcKm / fuel;
+                    record.varKPL = record.carKPL - record.calcKPL;
+                    record.carL100 = MPGtoL100(carMPG);
+                    record.calcL100 = (fuel / record.calcKm) * 100M;
+                    record.varL100 = record.carL100 - record.calcL100;
 
                     // Return recieved data and calcuated data for debugging
 
-                    responseMessage = "Got data:" + System.Environment.NewLine +
-                        $"Date: {dateIn}" + System.Environment.NewLine +
-                        $"ODO: {odo}" + System.Environment.NewLine +
-                        $"Car MPG: {carMPG}" + System.Environment.NewLine +
-                        $"Fuel: {fuel}" + System.Environment.NewLine +
-                        "Calcuated data:" + System.Environment.NewLine +
-                        $"Car Miles Traveled: {workMiles}" + System.Environment.NewLine +
-                        $"Car KM Traveled: {workKM}" + System.Environment.NewLine +
-                        $"Car KPL: {workCarKPL}" + System.Environment.NewLine +
-                        $"Car l/100km: {workCarL100}" + System.Environment.NewLine +
-                        $"Actual KPL: {workCalcKPL}" + System.Environment.NewLine +
-                        $"Actual l/100km: {workCalcL100}";
+                    string recordEcho = JsonSerializer.Serialize(record);
 
+                    responseMessage =
+                        "{" + System.Environment.NewLine +
+                        "\"request\":" + System.Environment.NewLine +
+                        requestBody + System.Environment.NewLine +
+                        "," + System.Environment.NewLine +
+                        "\"calcuated\":" + System.Environment.NewLine +
+                        recordEcho + System.Environment.NewLine +
+                        "}";
+
+                    // Add new line to csv file with new data
+
+                 
                 }
 
             }
@@ -152,20 +169,32 @@ namespace fuel_economy_analysis
             return kilometers;
         }
 
-        public class datafile //The design of the csv file
+        public class recordDesign //The design of the csv file
         {
-            public DateAndTime date { get; set; }
+            public DateTime date { get; set; }
+            public int calcDays { get; set; }
             public decimal carODO { get; set; }
             public decimal calcMiles { get; set; }
             public decimal calcKm { get; set; }
+            public decimal calcKmD { get; set; }
             public decimal carFuel { get; set; }
             public decimal carMPG { get; set; }
             public decimal carKPL { get; set; }
-            public decimal carL100 { get; set; }
             public decimal calcKPL { get; set; }
+            public decimal varKPL { get; set; }
+            public decimal carL100 { get; set; }
             public decimal calcL100 { get; set; }
+            public decimal varL100 { get; set; }
         }
 
+        public class requestDesign // The design for the data that's sent in the http request
+        {
+            public string key { get; set; }
+            public string date { get; set; }
+            public string odo { get; set; }
+            public string carMPG { get; set; }
+            public string fuel { get; set; }
+        }
     }
 
 
