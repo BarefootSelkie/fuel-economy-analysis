@@ -24,7 +24,8 @@ namespace fuel_economy_analysis
         [FunctionName("InputToDataStore")]
         public static async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
-            [Blob("azure-webjobs-hosts/fueldata.csv", FileAccess.Read, Connection = "")] Stream myBlob,
+            [Blob("azure-webjobs-hosts/fueldata.csv", FileAccess.Read, Connection = "")] Stream fileIn,
+            [Blob("azure-webjobs-hosts/fueldata.csv", FileAccess.Write, Connection = "")] Stream fileOut,
             ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
@@ -93,7 +94,7 @@ namespace fuel_economy_analysis
 
             if (!failed)
             {
-                using (StreamReader reader = new StreamReader(myBlob))
+                using (StreamReader reader = new StreamReader(fileIn))
                 using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
                 {
                     // Load the csv file into a variable
@@ -132,9 +133,16 @@ namespace fuel_economy_analysis
                         recordEcho + System.Environment.NewLine +
                         "}";
 
-                    // Add new line to csv file with new data
+                    dataStore.Add(record);
 
-                 
+                    // Add new line to csv file with new data
+                    using (var writer = new StreamWriter(fileOut))
+                    using (var csvOut = new CsvWriter(writer, CultureInfo.InvariantCulture))
+                    {
+                        csvOut.Configuration.HasHeaderRecord = true;
+                        csvOut.WriteRecords(dataStore);
+                    }
+
                 }
 
             }
