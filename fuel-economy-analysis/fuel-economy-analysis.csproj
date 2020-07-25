@@ -3,6 +3,7 @@
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <AzureFunctionsVersion>v3</AzureFunctionsVersion>
     <RootNamespace>fuel_economy_analysis</RootNamespace>
+    <UserSecretsId>dd75d7f2-5f04-452c-8fab-701c65ed9a6f</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Azure.Storage.Blobs" Version="12.4.4" />

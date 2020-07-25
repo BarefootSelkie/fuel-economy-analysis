@@ -16,6 +16,7 @@ using CsvHelper;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using System.Text;
 
 namespace fuel_economy_analysis
 {
@@ -24,19 +25,18 @@ namespace fuel_economy_analysis
         [FunctionName("InputToDataStore")]
         public static async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
-            [Blob("azure-webjobs-hosts/fueldata.csv", FileAccess.Read, Connection = "")] Stream fileIn,
-            [Blob("azure-webjobs-hosts/fueldata.csv", FileAccess.Write, Connection = "")] Stream fileOut,
+            [Blob("azure-webjobs-hosts/fuel-data/fueldata.csv", FileAccess.Read, Connection = "")] Stream fileIn,
+            [Blob("azure-webjobs-hosts/fuel-data-logs/{DateTime}.json", FileAccess.Write, Connection = "")] Stream logOut,
+            [Blob("azure-webjobs-hosts/fuel-data/fueldata.csv", FileAccess.Write, Connection = "")] Stream fileOut,
             ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
             string error = "Error: 400";
             bool failed = false;
-            string secKey = "Change";
 
             // Get data from the query 
 
-            string key = req.Query["key"];
             string dateIn = req.Query["date"];
             string odoIn = req.Query["odo"];
             string carMPGIn = req.Query["carMPG"];
@@ -48,9 +48,10 @@ namespace fuel_economy_analysis
 
             if (!string.IsNullOrEmpty(requestBody))
             {
+                logOut.Write(Encoding.UTF8.GetBytes(requestBody));
+
                 var data = JsonSerializer.Deserialize<requestDesign>(requestBody);
 
-                key = key ?? data?.key;
                 dateIn = dateIn ?? data?.date;
                 odoIn = odoIn ?? data?.odo;
                 carMPGIn = carMPGIn ?? data?.carMPG;
@@ -61,12 +62,6 @@ namespace fuel_economy_analysis
 
             DateTime date;
             decimal odo, carMPG, fuel;
-
-            if (key != secKey)
-            {
-                failed = true;
-                error += System.Environment.NewLine + "Invalid Key";
-            }
 
             if (!DateTime.TryParse(dateIn, out date))
             {
@@ -109,6 +104,8 @@ namespace fuel_economy_analysis
 
                     record.date = date;
                     record.carODO = odo;
+                    record.carFuel = fuel;
+                    record.carMPG = carMPG;
                     record.calcDays = Convert.ToInt32((date - dataStore.Last().date).TotalDays);
                     record.calcMiles = odo - dataStore.Last().carODO;
                     record.calcKm = MilestoKM(record.calcMiles);
@@ -150,6 +147,16 @@ namespace fuel_economy_analysis
             {
                 // If there was an error report error
                 responseMessage = error;
+                using (StreamReader reader = new StreamReader(fileIn))
+                using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+                using (var writer = new StreamWriter(fileOut))
+                using (var csvOut = new CsvWriter(writer, CultureInfo.InvariantCulture))
+                {
+                    var dataStore = csv.GetRecords<recordDesign>().ToList();
+                    csvOut.Configuration.HasHeaderRecord = true;
+                    csvOut.WriteRecords(dataStore);
+                }
+
             }
 
             return new OkObjectResult(responseMessage);
@@ -197,7 +204,6 @@ namespace fuel_economy_analysis
 
         public class requestDesign // The design for the data that's sent in the http request
         {
-            public string key { get; set; }
             public string date { get; set; }
             public string odo { get; set; }
             public string carMPG { get; set; }
